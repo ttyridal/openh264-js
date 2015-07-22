@@ -1,0 +1,100 @@
+<html>
+<head>
+<title>
+</title>
+<body>
+<canvas id="videocanvas" width="1280" height="720"></canvas>
+<script src="WebGLCanvas.js"></script>
+<script type="text/javascript">
+(function(root){
+
+    function nal_generator(data) {
+        var currentsps = null;
+        var currentpps = null;
+        function nextNal(b, ofs) {
+            var o = ofs+3;
+            var i, zc = 0;
+            for (;o < b.length; o++) {
+                switch (b[o]) {
+                    case 0: zc++; break;
+                    case 1:
+                        if (zc == 3) return o - 3;
+                    default:
+                        zc = 0;
+                }
+            } 
+            return null;
+        }
+
+        var ofs = 0;
+        var mydata = data;
+        var l = nextNal(mydata, ofs);
+
+        function getnext() {
+            if (l == null) return null;
+            var nal = mydata.subarray(ofs, l);
+            ofs = l;
+            l = nextNal(mydata, ofs);
+            return nal;
+        }
+        return getnext;
+    }
+    var nalgen = null;
+    var width=1280, height=720;
+
+    var display = new WebGLCanvas(document.getElementById('videocanvas'));
+    var decoder = new Worker('decoder.js');
+    decoder.addEventListener('message', function(e) {
+        var message = e.data;
+        window.setTimeout(function() {
+            loadNextFrame();
+            display.drawNextOuptutPictureGL(width,height,null,message.data);
+        },15);
+    });
+
+
+    function loadNextFrame() {
+        var nal = 1;
+        if (! nalgen) return;
+
+        while (nal) {
+            nal = nalgen();
+            decoder.postMessage({type:'frame', data:nal});
+            if (nal && (((nal[4]&0x1f) == 5) || ((nal[4]&0x1f) == 1))) {
+                break;
+            }
+        }
+        if (nal == null) {
+            console.log('clsoing');
+            decoder.postMessage({type:'close'});
+            nalgen = null;
+        }
+    }
+
+
+
+    var oReq = new XMLHttpRequest();
+    console.log("doing load");
+    oReq.open("GET", "test.h264", true);
+    oReq.responseType = "arraybuffer";
+    oReq.onload = function() {
+        console.log("file loaded, starting decode");
+        var data = new Uint8Array(oReq.response);
+        if (!data) {
+            alert("no oReq.response");
+            return;
+        }
+        nalgen = nal_generator(data);
+
+        loadNextFrame();
+        loadNextFrame(); // openh264 is (always?) one frame late
+    }
+
+    oReq.send(null);
+
+}(this));
+
+
+</script>
+
+</body>
