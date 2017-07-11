@@ -1,3 +1,6 @@
+Note: This project is NOT maintained. I don't provide any support for it.
+
+
 # OpenH264-js
 
 This is an example of the Cisco's OpenH264 library compiled
